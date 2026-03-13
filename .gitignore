@@ -3,9 +3,6 @@ ml/data/raw/
 ml/data/processed/
 ml/data/features/
 
-# ── Modèles entraînés ─────────────────────────────────
-ml/models/
-backend/models/
 
 # ── Environnements virtuels ───────────────────────────
 .venv/
