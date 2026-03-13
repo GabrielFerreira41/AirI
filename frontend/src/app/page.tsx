@@ -62,7 +62,7 @@ export default function Home() {
       <header className="app-header">
         <div className="logo-group">
           <div className="logo-icon-wrap">✈</div>
-          <span className="app-title">Flight<span>Sense</span></span>
+          <span className="app-title">AirL</span>
         </div>
         <div className="header-sep" />
         <div className="header-chip">
