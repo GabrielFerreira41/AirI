@@ -1,0 +1,31 @@
+# ── Data ─────────────────────────────────────────────
+ml/data/raw/
+ml/data/processed/
+ml/data/features/
+
+# ── Modèles entraînés ─────────────────────────────────
+ml/models/
+backend/models/
+
+# ── Environnements virtuels ───────────────────────────
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# ── W&B ──────────────────────────────────────────────
+ml/wandb/
+
+# ── Variables d'environnement ─────────────────────────
+.env
+.env.local
+.env*.local
+
+# ── Next.js ───────────────────────────────────────────
+frontend/.next/
+frontend/node_modules/
+frontend/out/
+
+# ── OS ────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
