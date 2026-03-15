@@ -92,15 +92,18 @@ function buildMarkerHtml(
 }
 
 function buildPlaneHtml(heading: number, altitude_m: number): string {
-  // Couleur selon altitude : bas=orange, haut=bleu
-  const color = altitude_m < 5000 ? "#f9ab00" : altitude_m < 10000 ? "#1a73e8" : "#5f6368";
-  return `<div style="
-    transform:rotate(${heading}deg);
-    font-size:13px;line-height:1;
-    color:${color};
-    filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));
-    transition:transform 1s ease;
-  ">✈</div>`;
+  const color = altitude_m < 5000 ? "#f9ab00" : altitude_m < 10000 ? "#1a73e8" : "#9aa0a6";
+  // Nez pointant vers le haut → rotate(heading) oriente vers la bonne direction
+  return `<div style="width:12px;height:12px;transform:rotate(${heading}deg);filter:drop-shadow(0 1px 2px rgba(0,0,0,0.4));">
+    <svg viewBox="0 0 20 20" width="12" height="12" xmlns="http://www.w3.org/2000/svg">
+      <!-- Fuselage -->
+      <ellipse cx="10" cy="10" rx="1.8" ry="8" fill="${color}"/>
+      <!-- Ailes principales -->
+      <path d="M10 9 L1 13 L3 14 L10 11 L17 14 L19 13 Z" fill="${color}"/>
+      <!-- Empennage (queue) -->
+      <path d="M10 17 L6 19.5 L7 19.5 L10 18.2 L13 19.5 L14 19.5 Z" fill="${color}"/>
+    </svg>
+  </div>`;
 }
 
 // ── Composant ────────────────────────────────────────────────────────────────
@@ -288,8 +291,8 @@ export default function MapView({
         const icon = L.divIcon({
           className: "",
           html: buildPlaneHtml(flight.heading, flight.altitude_m),
-          iconSize: [16, 16],
-          iconAnchor: [8, 8],
+          iconSize: [12, 12],
+          iconAnchor: [6, 6],
         });
 
         const alt  = flight.altitude_m.toLocaleString("fr-CA");
