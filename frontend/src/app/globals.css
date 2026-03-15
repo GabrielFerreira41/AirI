@@ -131,26 +131,50 @@ body {
   50%       { box-shadow: 0 0 0 5px rgba(30,142,62,0.08); }
 }
 
+.chip-live--blue {
+  background: var(--blue);
+  box-shadow: 0 0 0 2px rgba(26,115,232,0.2);
+  animation: pulse-blue 2s ease infinite;
+}
+@keyframes pulse-blue {
+  0%, 100% { box-shadow: 0 0 0 2px rgba(26,115,232,0.2); }
+  50%       { box-shadow: 0 0 0 5px rgba(26,115,232,0.08); }
+}
+
 .time-display {
   font-family: var(--mono);
   font-size: 12px;
   color: var(--text-2);
 }
 
-/* ── Carte formulaire — gauche ─────────────────────── */
-.form-card {
+/* ── Colonne gauche : form + historique ────────────── */
+.left-col {
   position: absolute;
   top: 80px;
   left: 16px;
   z-index: 200;
-  width: 300px;
+  width: 320px;
+  max-height: calc(100vh - 96px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-bottom: 12px;
+}
+.left-col::-webkit-scrollbar { display: none; }
+
+/* ── Carte formulaire — gauche ─────────────────────── */
+.form-card {
   background: rgba(255,255,255,0.97);
   backdrop-filter: blur(20px);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--card-shadow);
-  overflow: hidden;
+  overflow: clip;
   animation: slide-in-left 0.3s ease both;
+  flex-shrink: 0;
 }
 
 @keyframes slide-in-left {
@@ -361,165 +385,351 @@ body {
   white-space: nowrap;
 }
 
-/* ── Carte résultat — droite ───────────────────────── */
-.result-card {
+/* ── Carte prédiction redesignée (pc-*) ────────────── */
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px) scale(0.98); }
+  to   { opacity: 1; transform: translateX(0)    scale(1); }
+}
+
+.pc-card {
   position: absolute;
   top: 80px;
   right: 16px;
   z-index: 200;
-  width: 300px;
-  background: rgba(255,255,255,0.97);
-  backdrop-filter: blur(20px);
-  border: 1px solid;
+  width: 344px;
+  max-height: calc(100vh - 100px);
+  background: white;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--card-shadow);
-  overflow: hidden;
-  animation: slide-in-right 0.3s ease both;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-dark) transparent;
+  animation: slide-in-right 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+}
+.pc-card--delayed { border-color: rgba(217,48,37,0.3); }
+.pc-card--ontime  { border-color: rgba(30,142,62,0.3);  }
+
+/* Header — sticky au scroll */
+.pc-header { position: sticky; top: 0; z-index: 2; padding: 18px 20px 16px; }
+.pc-header-bg { position: absolute; inset: 0; }
+.pc-card--delayed .pc-header-bg { background: linear-gradient(135deg, #fce8e6 0%, #fff5f5 100%); }
+.pc-card--ontime  .pc-header-bg { background: linear-gradient(135deg, #e6f4ea 0%, #f4fbf6 100%); }
+.pc-header-content { position: relative; z-index: 1; }
+
+.pc-route {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 3px;
+}
+.pc-iata {
+  font-size: 28px; font-weight: 800;
+  letter-spacing: -1px; font-family: var(--mono);
+  line-height: 1;
+}
+.pc-card--delayed .pc-iata { color: var(--red); }
+.pc-card--ontime  .pc-iata { color: var(--green); }
+
+.pc-route-arrow {
+  font-size: 16px; color: var(--text-3);
+  animation: pc-fly 2s ease-in-out infinite;
+}
+@keyframes pc-fly {
+  0%, 100% { transform: translateX(0); }
+  50%       { transform: translateX(4px); }
 }
 
-@keyframes slide-in-right {
-  from { opacity: 0; transform: translateX(12px); }
-  to   { opacity: 1; transform: translateX(0); }
+.pc-route-cities { font-size: 11px; color: var(--text-2); margin-bottom: 10px; }
+
+.pc-status-badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 5px 13px; border-radius: 20px;
+  font-size: 11px; font-weight: 700;
+}
+.pc-status-badge--delay { background: var(--red);   color: white; }
+.pc-status-badge--ok    { background: var(--green); color: white; }
+
+/* Corps de la carte */
+.pc-body {
+  padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px;
 }
 
-.result-card.delayed { border-color: rgba(217,48,37,0.25); }
-.result-card.ontime  { border-color: rgba(30,142,62,0.25); }
-
-.result-stripe {
-  height: 4px;
+/* Gauge + métriques */
+.pc-hero {
+  display: flex; align-items: center;
+  justify-content: center; gap: 20px;
+  padding: 4px 0 2px;
 }
-.result-card.delayed .result-stripe { background: linear-gradient(90deg, var(--red), #f28b82); }
-.result-card.ontime  .result-stripe { background: linear-gradient(90deg, var(--green), #81c995); }
-
-.result-body { padding: 14px 16px; display: flex; flex-direction: column; gap: 12px; }
-
-.result-top {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 10px;
+.pc-hero-metrics { display: flex; flex-direction: column; gap: 14px; }
+.pc-metric { display: flex; align-items: baseline; gap: 3px; flex-wrap: wrap; }
+.pc-metric-val  { font-size: 24px; font-weight: 800; font-family: var(--mono); color: var(--text); line-height: 1; }
+.pc-metric-unit { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.pc-metric-label {
+  width: 100%; font-size: 9px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-3);
+  margin-top: 1px;
 }
 
-.result-title {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text);
-  line-height: 1.2;
+/* Barre seuil */
+.pc-prob-wrap  { display: flex; flex-direction: column; gap: 3px; }
+.pc-prob-track {
+  height: 6px; background: var(--surface-2);
+  border-radius: 3px; position: relative;
 }
-
-.result-subtitle {
-  font-size: 11px;
-  color: var(--text-2);
-  margin-top: 2px;
+.pc-prob-fill {
+  position: absolute; left: 0; top: 0; bottom: 0;
+  border-radius: 3px;
+  transition: width 0.9s cubic-bezier(0.34,1.56,0.64,1);
 }
-
-.result-badge {
-  padding: 3px 9px;
-  border-radius: 20px;
-  font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  flex-shrink: 0;
+.pc-card--delayed .pc-prob-fill { background: linear-gradient(90deg, #f28b82, var(--red)); }
+.pc-card--ontime  .pc-prob-fill { background: linear-gradient(90deg, #81c995, var(--green)); }
+.pc-prob-thresh {
+  position: absolute; top: -4px; bottom: -4px;
+  width: 2px; background: var(--yellow); border-radius: 1px;
 }
-.result-card.delayed .result-badge { background: var(--red-light);   color: var(--red); }
-.result-card.ontime  .result-badge { background: var(--green-light); color: var(--green); }
-
-/* Métriques */
-.metrics-row {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
+.pc-prob-labels {
+  display: flex; justify-content: space-between;
+  font-size: 9px; color: var(--text-3); font-family: var(--mono);
 }
+.pc-prob-thresh-label { color: var(--yellow); font-weight: 700; }
 
-.metric-box {
-  background: var(--surface);
+/* Chips confiance/weekend */
+.pc-chips-row  { display: flex; flex-wrap: wrap; gap: 5px; }
+.pc-conf-chip  {
+  font-size: 10px; font-weight: 600; padding: 3px 9px;
+  border-radius: 20px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text-2);
+}
+.pc-conf-chip--high   { background: var(--green-light);  border-color: rgba(30,142,62,0.25);  color: var(--green); }
+.pc-conf-chip--medium { background: var(--yellow-light); border-color: rgba(249,171,0,0.25);  color: #b06000; }
+
+/* Accordéon sections */
+.pc-section {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: 9px 6px;
-  text-align: center;
+  overflow: hidden;
 }
-
-.metric-value {
-  font-size: 20px;
-  font-weight: 700;
-  line-height: 1;
-  color: var(--text);
+.pc-section-toggle {
+  width: 100%; display: flex; align-items: center; gap: 7px;
+  padding: 9px 10px; background: var(--surface);
+  border: none; cursor: pointer;
+  transition: background 0.15s;
 }
-.result-card.delayed .metric-value.hi { color: var(--red); }
-.result-card.ontime  .metric-value.hi { color: var(--green); }
-
-.metric-label {
-  font-size: 9px;
-  font-weight: 600;
-  color: var(--text-3);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-  margin-top: 3px;
+.pc-section-toggle:hover { background: var(--surface-2); }
+.pc-section-icon    { font-size: 13px; }
+.pc-section-title   { flex: 1; font-size: 11px; font-weight: 600; color: var(--text); text-align: left; }
+.pc-section-chevron {
+  font-size: 18px; color: var(--text-3); line-height: 1;
+  transition: transform 0.2s; transform: rotate(90deg);
 }
+.pc-section-chevron--open { transform: rotate(-90deg); }
+.pc-section-body { padding: 10px; border-top: 1px solid var(--border); }
 
-/* Barre probabilité */
-.prob-row {
+/* Graphique météo 12h */
+.wxchart-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 10px 4px;
+  background: var(--surface);
+}
+.wxchart-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+}
+.wxchart-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-2);
+}
+.wxchart-legend {
+  display: flex;
   gap: 8px;
 }
-
-.prob-pct {
-  font-family: var(--mono);
-  font-size: 11px;
-  color: var(--text-2);
-  min-width: 28px;
-  text-align: right;
+.wxchart-leg {
+  font-size: 9px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
-
-.prob-track {
-  flex: 1;
-  height: 5px;
-  background: var(--surface-2);
-  border-radius: 3px;
-  position: relative;
-}
-
-.prob-fill {
-  position: absolute;
-  left: 0; top: 0; bottom: 0;
-  border-radius: 3px;
-  transition: width 0.6s cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-.result-card.delayed .prob-fill { background: var(--red); }
-.result-card.ontime  .prob-fill { background: var(--green); }
-
-.prob-threshold {
-  position: absolute;
-  top: -3px; bottom: -3px;
-  width: 2px;
-  background: var(--yellow);
+.wxchart-leg::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 2px;
   border-radius: 1px;
 }
+.wxchart-leg--temp { color: var(--red); }
+.wxchart-leg--temp::before { background: var(--red); }
+.wxchart-leg--wind { color: var(--text-3); }
+.wxchart-leg--wind::before { background: #bdc1c6; }
+.wxchart-leg--rain { color: var(--blue); }
+.wxchart-leg--rain::before { background: var(--blue); height: 6px; border-radius: 1px; }
 
-/* Météo */
-.weather-chips {
+/* Facteurs explicatifs */
+.factors-section {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.factors-title {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.factors-icon {
+  font-size: 12px;
+}
+.factors-list {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;
 }
-
-.w-chip {
-  display: flex;
+.factor-tag {
+  display: inline-flex;
   align-items: center;
-  gap: 3px;
   padding: 3px 9px;
-  background: var(--surface);
-  border: 1px solid var(--border);
   border-radius: 20px;
   font-size: 11px;
   font-weight: 500;
-  color: var(--text-2);
+  border: 1px solid transparent;
 }
-.w-chip.warn {
+.factor-tag--alert {
+  background: var(--red-light);
+  border-color: rgba(217,48,37,0.2);
+  color: var(--red);
+}
+.factor-tag--warn {
   background: var(--yellow-light);
   border-color: rgba(249,171,0,0.3);
   color: #b06000;
+}
+.factor-tag--info {
+  background: var(--blue-light);
+  border-color: rgba(26,115,232,0.2);
+  color: var(--blue);
+}
+
+/* Panneau météo côte-à-côte */
+.wx-panel {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.wx-col {
+  flex: 1;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--surface);
+  transition: background 0.2s;
+}
+.wx-col--bad {
+  background: var(--yellow-light);
+}
+.wx-col--loading {
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 20px;
+}
+
+.wx-col-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.wx-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-3);
+}
+.wx-iata {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text);
+  font-family: var(--mono);
+}
+.wx-model-badge {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--blue);
+  background: var(--blue-light);
+  border-radius: 4px;
+  padding: 1px 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.wx-icon {
+  font-size: 28px;
+  line-height: 1;
+}
+.wx-city {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.wx-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.wx-stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.wx-stat-icon {
+  font-size: 11px;
+  width: 14px;
+  text-align: center;
+}
+.wx-stat-val {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--mono);
+}
+
+.wx-bad-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #b06000;
+  background: rgba(249,171,0,0.2);
+  border-radius: 4px;
+  padding: 2px 6px;
+  align-self: flex-start;
+}
+
+.wx-divider {
+  width: 1px;
+  background: var(--border);
+  flex-shrink: 0;
+}
+
+.wx-weekend {
+  font-size: 11px;
+  color: var(--text-2);
+  font-weight: 500;
 }
 
 /* Confidence */
@@ -536,6 +746,120 @@ body {
   border-radius: 6px;
   padding: 3px 8px;
 }
+
+
+/* ── Timeline chart (tl-*) ──────────────────────────── */
+.tl-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+.tl-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.tl-title  { font-size: 11px; font-weight: 600; color: var(--text); }
+.tl-legend { display: flex; gap: 8px; }
+.tl-leg    { font-size: 10px; font-weight: 500; color: var(--text-3); }
+.tl-leg--best  { color: var(--green); }
+.tl-leg--worst { color: var(--red); }
+.tl-summary {
+  display: flex; flex-direction: column; gap: 2px;
+  margin-top: 6px; font-size: 10px;
+}
+.tl-sum-best  { color: var(--green); font-weight: 500; }
+.tl-sum-worst { color: var(--red);   font-weight: 500; }
+
+/* ── Airline compare (ac-*) ─────────────────────────── */
+.ac-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 10px;
+}
+.ac-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.ac-title    { font-size: 11px; font-weight: 600; color: var(--text); }
+.ac-subtitle { font-size: 10px; color: var(--text-3); }
+.ac-list     { display: flex; flex-direction: column; gap: 5px; }
+
+.ac-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 52px 14px;
+  align-items: center; gap: 6px;
+  padding: 4px 6px; border-radius: 6px;
+  background: var(--white); border: 1px solid var(--border);
+}
+.ac-row--selected { border-color: var(--blue); background: var(--blue-light); }
+.ac-row--best     { border-color: var(--green); }
+
+.ac-airline  { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.ac-flag     { font-size: 14px; }
+.ac-names    { display: flex; flex-direction: column; min-width: 0; }
+.ac-code     { font-size: 10px; font-weight: 700; color: var(--text); font-family: var(--mono); }
+.ac-name     { font-size: 9px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.ac-bar-wrap { position: relative; height: 6px; background: var(--border); border-radius: 3px; overflow: visible; }
+.ac-bar      { height: 100%; border-radius: 3px; }
+.ac-threshold {
+  position: absolute; top: -3px; bottom: -3px;
+  width: 2px; background: var(--yellow);
+  border-radius: 1px;
+}
+
+.ac-right  { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.ac-pct    { font-size: 11px; font-weight: 700; font-family: var(--mono); }
+.ac-delay  { font-size: 9px; color: var(--red); font-weight: 500; }
+
+.ac-badge-best { font-size: 10px; color: var(--green); font-weight: 700; }
+.ac-badge-sel  { font-size: 10px; color: var(--blue); }
+
+/* ── History panel (hist-*) ──────────────────────────── */
+.hist-wrap {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--card-shadow);
+  padding: 10px 12px;
+}
+.hist-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 8px;
+}
+.hist-title { font-size: 11px; font-weight: 600; color: var(--text-2); }
+.hist-clear {
+  background: none; border: none; cursor: pointer;
+  font-size: 11px; color: var(--text-3); padding: 2px 4px;
+  border-radius: 4px; transition: background 0.15s;
+}
+.hist-clear:hover { background: var(--surface-2); color: var(--red); }
+
+.hist-list  { display: flex; flex-direction: column; gap: 4px; }
+.hist-entry {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; text-align: left; background: var(--surface);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 6px 10px; cursor: pointer; transition: all 0.15s;
+}
+.hist-entry:hover { background: var(--blue-light); border-color: var(--blue); }
+
+.hist-left    { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.hist-route   { display: flex; align-items: center; gap: 5px; font-size: 12px; }
+.hist-arrow   { color: var(--text-3); font-size: 10px; }
+.hist-airline { font-size: 10px; color: var(--text-3); font-family: var(--mono); }
+.hist-time    { font-size: 10px; color: var(--text-3); }
+
+.hist-badge {
+  font-size: 10px; font-weight: 600; font-family: var(--mono);
+  padding: 2px 7px; border-radius: 10px; white-space: nowrap; flex-shrink: 0;
+}
+.hist-badge--delay { background: var(--red-light);   color: var(--red);   }
+.hist-badge--ok    { background: var(--green-light);  color: var(--green); }
 
 /* ── Leaflet overrides ─────────────────────────────── */
 .leaflet-container { background: #e8eaed !important; }
@@ -573,6 +897,40 @@ body {
   font-size: 12px !important;
   padding: 8px 12px !important;
 }
+
+/* Tooltip enrichi aéroport */
+.rt-tooltip.leaflet-tooltip { padding: 10px 12px !important; min-width: 180px; }
+
+.rt-wrap { display: flex; flex-direction: column; gap: 6px; }
+.rt-wrap--plane { min-width: 120px; }
+
+.rt-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rt-name   { font-size: 12px; font-weight: 600; color: var(--text); }
+.rt-loading{ font-size: 11px; color: var(--text-3); }
+
+.rt-status {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 7px; border-radius: 10px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.rt-weather { display: flex; flex-wrap: wrap; gap: 4px; }
+.rt-chip {
+  font-size: 11px; font-weight: 500;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 2px 7px;
+  color: var(--text-2);
+  white-space: nowrap;
+}
+
+.rt-stats {
+  display: flex; gap: 10px;
+  font-size: 11px; color: var(--text-2);
+}
+.rt-stat strong { color: var(--text); }
 
 .leaflet-control-attribution {
   background: rgba(255,255,255,0.85) !important;

@@ -106,19 +106,60 @@ class PredictRequest(BaseModel):
     departure_datetime: str      # ISO format "2024-06-15T14:30:00"
     distance_km: float = None    # optionnel, calculé si absent
 
+class Factor(BaseModel):
+    label:    str
+    severity: str   # "alert" | "warn" | "info"
+
 class PredictResponse(BaseModel):
     is_delayed: bool
     delay_probability: float
     delay_minutes: float
-    confidence: str              # "high" / "medium" / "low"
+    confidence: str
     threshold_used: float
     features_used: dict
+    factors: list[Factor]
+
+class TimelineRequest(BaseModel):
+    origin:      str
+    destination: str
+    airline_code: str
+    date:        str   # "2026-03-15"
+
+class TimelinePoint(BaseModel):
+    hour:          int
+    probability:   float
+    is_delayed:    bool
+    delay_minutes: float
+
+class AirlinesRequest(BaseModel):
+    origin:             str
+    destination:        str
+    departure_datetime: str
+
+class AirlineResult(BaseModel):
+    code:          str
+    name:          str
+    probability:   float
+    is_delayed:    bool
+    delay_minutes: float
+
+AIRLINE_NAMES = {
+    "AC": "Air Canada",
+    "WS": "WestJet",
+    "PD": "Porter",
+    "F8": "Flair",
+    "UA": "United",
+    "DL": "Delta",
+    "AA": "American",
+    "WN": "Southwest",
+}
+
 
 
 # ------------------------------------------------------------------ #
 # Helpers                                                             #
 # ------------------------------------------------------------------ #
-def get_weather_now(iata: str, lat: float, lon: float) -> dict:
+def get_weather_now(iata: str, lat: float, lon: float, timeout: int = 10) -> dict:
     """Récupère la météo actuelle via Open-Meteo forecast API."""
     try:
         url = "https://api.open-meteo.com/v1/forecast"
@@ -132,7 +173,7 @@ def get_weather_now(iata: str, lat: float, lon: float) -> dict:
             "timezone":       "auto",
             "windspeed_unit": "kmh",
         }
-        resp = requests.get(url, params=params, timeout=10)
+        resp = requests.get(url, params=params, timeout=timeout)
         resp.raise_for_status()
         data = resp.json()["current"]
 
@@ -232,6 +273,88 @@ def build_feature_vector(req: PredictRequest, weather: dict) -> pd.DataFrame:
     return pd.DataFrame([row])
 
 
+_SEVERITY_ORDER = {"alert": 0, "warn": 1, "info": 2}
+
+def build_factors(req: "PredictRequest", weather: dict, dt: "datetime") -> list[dict]:
+    """Génère les facteurs explicatifs triés par sévérité (max 5)."""
+    factors: list[dict] = []
+    iata  = req.origin.upper()
+    wind  = weather["wind_kmh"]
+    precip= weather["precip_mm"]
+    vis   = weather["visibility"]
+    snow  = weather["snowfall_cm"]
+    temp  = weather["temperature"]
+    hour  = dt.hour
+    dow   = dt.weekday()
+    month = dt.month
+
+    # ── Météo ──────────────────────────────────────────────────────
+    if wind > 60:
+        factors.append({"label": f"Vent violent à {iata} ({wind:.0f} km/h)", "severity": "alert"})
+    elif wind > 40:
+        factors.append({"label": f"Vent fort à {iata} ({wind:.0f} km/h)", "severity": "alert"})
+    elif wind > 25:
+        factors.append({"label": f"Vent modéré à {iata} ({wind:.0f} km/h)", "severity": "warn"})
+
+    if precip > 10:
+        factors.append({"label": f"Très fortes précipitations ({precip:.1f} mm)", "severity": "alert"})
+    elif precip > 5:
+        factors.append({"label": f"Fortes précipitations ({precip:.1f} mm)", "severity": "alert"})
+    elif precip > 1:
+        factors.append({"label": f"Précipitations légères ({precip:.1f} mm)", "severity": "warn"})
+
+    if snow > 5:
+        factors.append({"label": f"Importantes chutes de neige ({snow:.1f} cm)", "severity": "alert"})
+    elif snow > 2:
+        factors.append({"label": f"Chutes de neige ({snow:.1f} cm)", "severity": "alert"})
+    elif snow > 0:
+        factors.append({"label": f"Légères chutes de neige ({snow:.1f} cm)", "severity": "warn"})
+
+    if vis < 500:
+        factors.append({"label": f"Visibilité très faible ({vis/1000:.1f} km)", "severity": "alert"})
+    elif vis < 1000:
+        factors.append({"label": f"Faible visibilité ({vis/1000:.1f} km)", "severity": "alert"})
+    elif vis < 3000:
+        factors.append({"label": f"Visibilité réduite ({vis/1000:.1f} km)", "severity": "warn"})
+
+    if temp < -25:
+        factors.append({"label": f"Grand froid ({temp:.0f}°C)", "severity": "warn"})
+    elif temp < -15:
+        factors.append({"label": f"Froid intense ({temp:.0f}°C)", "severity": "info"})
+
+    # ── Heure de départ ────────────────────────────────────────────
+    if 7 <= hour <= 9:
+        factors.append({"label": f"Heure de pointe matinale ({hour}h)", "severity": "warn"})
+    elif 16 <= hour <= 20:
+        factors.append({"label": f"Heure de pointe vespérale ({hour}h)", "severity": "warn"})
+
+    # ── Période ───────────────────────────────────────────────────
+    if dow >= 5:
+        factors.append({"label": "Week-end (trafic élevé)", "severity": "info"})
+    if (month == 12 and dt.day >= 20) or (month == 1 and dt.day <= 5):
+        factors.append({"label": "Période des fêtes", "severity": "warn"})
+    elif month == 7:
+        factors.append({"label": "Haute saison estivale", "severity": "warn"})
+
+    # ── Route historique (valeurs médianes du modèle) ─────────────
+    route_delay_rate = 0.19   # médiane du dataset BTS
+    if route_delay_rate > 0.30:
+        factors.append({"label": f"Route très retardée ({route_delay_rate*100:.0f}%)", "severity": "alert"})
+    elif route_delay_rate > 0.25:
+        factors.append({"label": f"Route souvent retardée ({route_delay_rate*100:.0f}%)", "severity": "warn"})
+    else:
+        factors.append({"label": f"Route historiquement retardée ({route_delay_rate*100:.0f}%)", "severity": "info"})
+
+    # ── Distance ─────────────────────────────────────────────────
+    distance = req.distance_km or 1200.0
+    if distance > 3000:
+        factors.append({"label": f"Long trajet ({distance:.0f} km) — risque de propagation", "severity": "warn"})
+
+    # Trier par sévérité, garder les 5 plus importants
+    factors.sort(key=lambda f: _SEVERITY_ORDER.get(f["severity"], 9))
+    return factors[:5]
+
+
 # ------------------------------------------------------------------ #
 # Endpoints                                                           #
 # ------------------------------------------------------------------ #
@@ -288,6 +411,8 @@ def predict(req: PredictRequest):
         origin_airport["lon"] if origin_airport else -75.0,
     )
 
+    dt = datetime.fromisoformat(req.departure_datetime)
+
     # Vecteur de features
     X = build_feature_vector(req, weather)
 
@@ -320,10 +445,235 @@ def predict(req: PredictRequest):
         threshold_used    = threshold,
         features_used     = {
             "weather":     weather,
-            "dep_hour":    datetime.fromisoformat(req.departure_datetime).hour,
-            "is_weekend":  int(datetime.fromisoformat(req.departure_datetime).weekday() >= 5),
+            "dep_hour":    dt.hour,
+            "is_weekend":  int(dt.weekday() >= 5),
         },
+        factors = build_factors(req, weather, dt),
     )
+
+
+@app.get("/weather/{iata}/hourly")
+def get_weather_hourly(iata: str, dt: str):
+    """Prévisions météo horaires autour de l'heure de départ (±6h)."""
+    airport = AIRPORTS_BY_IATA.get(iata.upper())
+    if not airport:
+        raise HTTPException(status_code=404, detail=f"Aéroport {iata} non trouvé")
+
+    try:
+        departure = datetime.fromisoformat(dt)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Format datetime invalide (ISO 8601)")
+
+    try:
+        url = "https://api.open-meteo.com/v1/forecast"
+        params = {
+            "latitude":       airport["lat"],
+            "longitude":      airport["lon"],
+            "hourly":         ["temperature_2m", "precipitation", "windspeed_10m", "weathercode"],
+            "timezone":       "auto",
+            "windspeed_unit": "kmh",
+            "forecast_days":  10,
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()["hourly"]
+        times = data["time"]  # ["2026-03-15T17:00", ...]
+
+        # Trouver l'index le plus proche de l'heure de départ
+        dep_str = departure.strftime("%Y-%m-%dT%H:00")
+        try:
+            dep_idx = times.index(dep_str)
+        except ValueError:
+            dep_idx = min(
+                range(len(times)),
+                key=lambda i: abs(datetime.fromisoformat(times[i]) - departure),
+            )
+
+        start = max(0, dep_idx - 6)
+        end   = min(len(times) - 1, dep_idx + 6)
+
+        hours = []
+        for i in range(start, end + 1):
+            t = datetime.fromisoformat(times[i])
+            hours.append({
+                "time":         times[i],
+                "hour":         t.hour,
+                "label":        t.strftime("%Hh"),
+                "temperature":  round(data["temperature_2m"][i] or 0, 1),
+                "wind_kmh":     round(data["windspeed_10m"][i] or 0, 1),
+                "precip_mm":    round(data["precipitation"][i] or 0, 2),
+                "is_departure": i == dep_idx,
+            })
+
+        return {
+            "iata":         iata.upper(),
+            "departure_dt": departure.isoformat(),
+            "hours":        hours,
+        }
+
+    except Exception as e:
+        log.warning(f"Prévisions horaires indisponibles pour {iata}: {e}")
+        raise HTTPException(status_code=503, detail="Prévisions horaires non disponibles")
+
+
+# Données demo : vols/jour et taux de retard par aéroport
+_AIRPORT_STATS = {
+    "YYZ": {"flights_today": 420, "delay_rate": 0.22},
+    "YVR": {"flights_today": 280, "delay_rate": 0.19},
+    "YUL": {"flights_today": 260, "delay_rate": 0.21},
+    "YYC": {"flights_today": 200, "delay_rate": 0.18},
+    "YEG": {"flights_today": 140, "delay_rate": 0.17},
+    "YOW": {"flights_today": 130, "delay_rate": 0.20},
+    "YHZ": {"flights_today":  90, "delay_rate": 0.23},
+    "YWG": {"flights_today": 110, "delay_rate": 0.19},
+    "YQB": {"flights_today":  80, "delay_rate": 0.21},
+    "YYJ": {"flights_today":  70, "delay_rate": 0.16},
+    "YQR": {"flights_today":  60, "delay_rate": 0.17},
+    "YXE": {"flights_today":  55, "delay_rate": 0.18},
+}
+
+@app.get("/airports/summary")
+def get_airports_summary():
+    """Données statiques par aéroport — retour immédiat, sans appel externe.
+    La météo temps réel est chargée à la demande via GET /weather/{iata}."""
+    current_hour = datetime.now().hour
+    is_peak = (7 <= current_hour <= 9) or (16 <= current_hour <= 20)
+
+    results = []
+    for airport in AIRPORTS:
+        stats = _AIRPORT_STATS.get(airport["iata"], {"flights_today": 100, "delay_rate": 0.19})
+        results.append({
+            "iata":          airport["iata"],
+            "city":          airport["city"],
+            "status":        "watch" if is_peak else "ok",
+            "delay_rate":    stats["delay_rate"],
+            "flights_today": stats["flights_today"],
+        })
+
+    return {"airports": results, "timestamp": datetime.now().isoformat()}
+
+
+@app.get("/flights/live")
+def get_live_flights_over_canada():
+    """Avions en vol au-dessus du Canada via OpenSky (sans authentification)."""
+    try:
+        resp = requests.get(
+            "https://opensky-network.org/api/states/all",
+            params={"lamin": 42.0, "lamax": 72.0, "lomin": -142.0, "lomax": -52.0},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        states = resp.json().get("states") or []
+
+        flights = []
+        for s in states:
+            lon, lat = s[5], s[6]
+            if lon is None or lat is None:
+                continue
+            if s[8]:          # on_ground
+                continue
+            alt = s[13] or s[7] or 0
+            if alt < 1500:    # ignore décollages/atterrissages
+                continue
+            flights.append({
+                "icao24":     s[0],
+                "callsign":   (s[1] or "").strip() or s[0],
+                "lat":        round(lat, 4),
+                "lon":        round(lon, 4),
+                "altitude_m": round(alt),
+                "velocity_ms":round(s[9] or 0),
+                "heading":    round(s[10] or 0),
+            })
+
+        return {"flights": flights[:100], "count": len(flights)}
+
+    except Exception as e:
+        log.warning(f"OpenSky live error: {e}")
+        return {"flights": [], "count": 0}
+
+
+@app.post("/predict/timeline")
+def predict_timeline(req: TimelineRequest):
+    """Probabilité de retard pour chaque heure de la journée (24 inférences)."""
+    if "clf" not in models:
+        raise HTTPException(status_code=503, detail="Modèles non chargés")
+
+    origin_ap = AIRPORTS_BY_IATA.get(req.origin.upper())
+    weather   = get_weather_now(
+        req.origin,
+        origin_ap["lat"] if origin_ap else 45.0,
+        origin_ap["lon"] if origin_ap else -75.0,
+    )
+    threshold = models["meta"]["lgbm_threshold"]
+
+    points = []
+    for hour in range(24):
+        fake = PredictRequest(
+            origin             = req.origin,
+            destination        = req.destination,
+            airline_code       = req.airline_code,
+            departure_datetime = f"{req.date}T{hour:02d}:00:00",
+        )
+        X    = build_feature_vector(fake, weather)
+        prob = float(models["clf"].predict_proba(X)[0][1])
+        is_d = prob >= threshold
+
+        if is_d:
+            delay_min = float(np.expm1(models["reg"].predict(X)[0]))
+            delay_min = max(0.0, round(delay_min, 1))
+        else:
+            delay_min = 0.0
+
+        points.append({"hour": hour, "probability": round(prob, 4),
+                        "is_delayed": is_d, "delay_minutes": delay_min})
+
+    probs      = [p["probability"] for p in points]
+    ranked     = sorted(range(24), key=lambda h: probs[h])
+    best_hours = ranked[:4]
+    worst_hours= ranked[-3:]
+
+    return {"points": points, "best_hours": best_hours,
+            "worst_hours": sorted(worst_hours), "threshold": threshold}
+
+
+@app.post("/predict/airlines")
+def predict_airlines(req: AirlinesRequest):
+    """Compare les probabilités de retard par compagnie sur une route."""
+    if "clf" not in models:
+        raise HTTPException(status_code=503, detail="Modèles non chargés")
+
+    origin_ap = AIRPORTS_BY_IATA.get(req.origin.upper())
+    weather   = get_weather_now(
+        req.origin,
+        origin_ap["lat"] if origin_ap else 45.0,
+        origin_ap["lon"] if origin_ap else -75.0,
+    )
+    threshold = models["meta"]["lgbm_threshold"]
+    results   = []
+
+    for code, name in AIRLINE_NAMES.items():
+        fake = PredictRequest(
+            origin             = req.origin,
+            destination        = req.destination,
+            airline_code       = code,
+            departure_datetime = req.departure_datetime,
+        )
+        X    = build_feature_vector(fake, weather)
+        prob = float(models["clf"].predict_proba(X)[0][1])
+        is_d = prob >= threshold
+
+        if is_d:
+            delay_min = float(np.expm1(models["reg"].predict(X)[0]))
+            delay_min = max(0.0, round(delay_min, 1))
+        else:
+            delay_min = 0.0
+
+        results.append({"code": code, "name": name,
+                         "probability": round(prob, 4),
+                         "is_delayed": is_d, "delay_minutes": delay_min})
+
+    results.sort(key=lambda r: r["probability"])
+    return {"airlines": results}
 
 
 @app.get("/stats/{origin}/{dest}")
